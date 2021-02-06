@@ -13,8 +13,29 @@
 
 #include <asm/io.h>
 
-#define GPT_CR_SWR	0x00008000
+#define GPT_CR_SWR				0x00008000
+#define GPT_CR_CLKSRC			0x000001C0
+#define GPT_CR_EN_24M			0x00004000
+#define GPT_CR_EN				0x00000001
+#define GPT_PR_PRESCALER		0x00000FFF
+#define GPT_PR_PRESCALER24M	0x0000F000
 
+
+
+#define NO_CLOCK (0)
+#define IPG_CLK (1<<6)
+#define IPG_CLK_HF (2<<6)
+#define IPG_EXT (3<<6)
+#define IPG_CLK_32K (4<<6)
+#define IPG_CLK_24M (5<<6)
+
+
+/*
+ipg_clk ipg_clk_root Peripheral clock
+ipg_clk_32k ckil_sync_clk_root Low-frequency reference clock (32 kHz)
+ipg_clk_highfreq perclk_clk_root High-frequency reference clock
+ipg_clk_s ipg_clk_root Peripheral access clock
+*/
 struct imx_gpt_timer_regs {
 	u32 cr;
 	u32 pr;
@@ -32,14 +53,12 @@ struct imx_gpt_timer_priv {
 	struct imx_gpt_timer_regs *base;
 };
 
-static int imx_gpt_timer_get_count(struct udevice *dev, u64 *count)
+static u64 imx_gpt_timer_get_count(struct udevice *dev)
 {
 	struct imx_gpt_timer_priv *priv = dev_get_priv(dev);
 	struct imx_gpt_timer_regs *regs = priv->base;
 
-	*count = readl(&regs->cnt);
-
-	return 0;
+	return readl(&regs->cnt);
 }
 
 static int imx_gpt_timer_probe(struct udevice *dev)
@@ -50,7 +69,7 @@ static int imx_gpt_timer_probe(struct udevice *dev)
 	struct clk clk;
 	fdt_addr_t addr;
 	u32 prescaler;
-	u32 rate, pr;
+	u32 rate;
 	int ret;
 
 	addr = dev_read_addr(dev);
@@ -84,16 +103,19 @@ static int imx_gpt_timer_probe(struct udevice *dev)
 
 	/* Get timer clock rate */
 	rate = clk_get_rate(&clk);
+	if((int)rate <= 0){
+		rate = 1056000000UL;
+	}
 
 	/* we set timer prescaler to obtain a 1MHz timer counter frequency */
-//	pr = (rate / CONFIG_SYS_HZ_CLOCK) - 1;
-	writel(pr, &regs->pr);
-
+	prescaler = (rate / CONFIG_SYS_HZ_CLOCK);
+	writel(GPT_PR_PRESCALER&prescaler, &regs->pr);	
 	/* Set timer frequency to 1MHz */
 	uc_priv->clock_rate = rate / prescaler;
-
+	clrbits_le32(&regs->cr,GPT_CR_CLKSRC);
+	setbits_le32(&regs->cr, IPG_CLK);
 	/* start timer */
-//	setbits_le32(&regs->cr1, CR1_CEN);
+	setbits_le32(&regs->cr, GPT_CR_EN);
 
 	return 0;
 }
@@ -111,8 +133,7 @@ U_BOOT_DRIVER(imx_gpt_timer) = {
 	.name = "imx_gpt_timer",
 	.id = UCLASS_TIMER,
 	.of_match = imx_gpt_timer_ids,
-	.priv_auto_alloc_size = sizeof(struct imx_gpt_timer_priv),
+	.priv_auto = sizeof(struct imx_gpt_timer_priv),
 	.probe = imx_gpt_timer_probe,
 	.ops = &imx_gpt_timer_ops,
 };
-
