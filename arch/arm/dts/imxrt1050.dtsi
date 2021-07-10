@@ -59,6 +59,20 @@
 			fsl,mux_mask = <0x7>;
 		};
 
+		flexspi2: spi@402A4000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "nxp,imx8mm-fspi";
+			reg = <0x402A4000 0x4000	>, <0x70000000 0x10000000>; // maped mem needs to be 240MB not whats here
+			reg-names = "fspi_base", "fspi_mmap";
+			interrupts = <GIC_SPI 107 IRQ_TYPE_LEVEL_HIGH>; // 107 is irq for fspi2
+			clocks = <&clks IMXRT1050_CLK_FLEXSPI2>,
+				 <&clks IMXRT1050_CLK_FLEXSPI2>;
+			clock-names = "fspi", "fspi_en";
+			status = "disabled";
+		};
+
+
 		clks: ccm@400fc000 {
 			compatible = "fsl,imxrt1050-ccm";
 			reg = <0x400fc000 0x4000>;
